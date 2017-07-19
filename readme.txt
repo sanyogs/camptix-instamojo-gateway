@@ -3,7 +3,7 @@ Contributors:      codexdemon
 Tags:              camptix, camptix payment, event ticketing, instamojo, instamojo payment, instamojo gateway, camptix Indian gateway, camptix payment gateway
 Requires at least: 3.5
 Tested up to:      4.8
-Stable tag:        1.0
+Stable tag:        1.2
 Donate link:       http://www.sanyog.in/donate/
 License:           GPLv2 or later
 License URI:       http://www.gnu.org/licenses/gpl-2.0.html
@@ -17,6 +17,8 @@ CampTix Instamojo Payment Gateway for Camptix Plugin. Allow visitors to purchase
 CampTix Instamojo Accept payments in INR through Instamojo using the CampTix plugin. CampTix plugin needs to be installed and activated for the Camptix Instamojo gateway to work.
 
 Feel free to post your feature requests, issues and pull requests to [CampTix Instamojo Gateway on GitHub](https://github.com/sanyogs/camptix-instamojo-gateway "CampTix Instamojo Payment Gateway on GitHub").
+
+[CampTix Instamojo Live Demo](http://newspro.sanyog.in/plus/camptix-demo/ "CampTix Instamojo Live Demo").
 
 
 == Installation ==
@@ -41,8 +43,17 @@ Please check Youtube Video How to get Access Token and API Key https://www.youtu
 == Screenshots ==
 
 1. Instamojo Enable
+2. Instamojo Activation
+3. Get Mobile Number Field
+4. Activate INR
 
 == Changelog ==
+
+= 1.2 =
+* Remove from Test Mode
+
+= 1.1 =
+* Added Mobile Support
 
 = 1.0 =
 * First version

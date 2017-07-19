@@ -5,7 +5,7 @@
  * Description: Simple and Flexible payment ticketing for Camptix using Instamojo Indian Payment Gateway
  * Author: codexdemon
  * Author URI: http://www.sanyog.in/
- * Version: 1.0
+ * Version: 1.2
  * License: GPLv2 or later
  */
 
