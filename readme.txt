@@ -3,7 +3,7 @@ Contributors:      codexdemon
 Tags:              camptix, camptix payment, event ticketing, instamojo, instamojo payment, instamojo gateway, camptix Indian gateway, camptix payment gateway
 Requires at least: 3.5
 Tested up to:      4.8
-Stable tag:        1.2
+Stable tag:        1.3
 Donate link:       http://www.sanyog.in/donate/
 License:           GPLv2 or later
 License URI:       http://www.gnu.org/licenses/gpl-2.0.html
@@ -48,6 +48,11 @@ Please check Youtube Video How to get Access Token and API Key https://www.youtu
 4. Activate INR
 
 == Changelog ==
+
+= 1.3 =
+* Added Mobile Support Dynamic
+* Added Extra Security SALT Key feature
+* Added Mobile Number validation
 
 = 1.2 =
 * Remove from Test Mode

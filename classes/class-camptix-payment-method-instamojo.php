@@ -28,14 +28,79 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 			
 			'Instamojo-Api-Key' => '',
 			'Instamojo-Auth-Token' => '',
-			'mobile-no' => '',
+			'Instamojo-salt' => '',
 			
 			'sandbox' => true,
 		), $this->get_payment_options() );
 
 		// IPN Listener
-		add_action( 'template_redirect', array( $this, 'template_redirect' ) );
+		//add_action( 'template_redirect', array( $this, 'template_redirect' ) );
+
+		if ( $this->is_gateway_enable() ) {
+			add_action( 'template_redirect', array( $this, 'template_redirect' ) );
+			add_action( 'camptix_attendee_form_additional_info', array( $this, 'add_phone_field' ), 10, 3 );
+			add_filter( 'camptix_form_register_complete_attendee_object', array( $this, 'add_attendee_info' ), 10, 3 );
+			add_action( 'camptix_checkout_update_post_meta', array( $this, 'save_attendee_info' ), 10, 2 );
+			add_filter( 'camptix_metabox_attendee_info_additional_rows', array( $this, 'show_attendee_info' ), 10, 2 );
+		}
+wp_register_script( 'camptix-instamojo-js', CAMPTIX_INSTAMOJO_URL . 'assets/js/camptix-instamojo.js', array( 'jquery' ), false, '1.0' );
+				wp_enqueue_script( 'camptix-instamojo-js' );
+
+
+
 	}
+
+
+	public function is_gateway_enable() {
+		return isset( $this->camptix_options['payment_methods'][ $this->id ] );
+	}
+
+	public function show_attendee_info( $rows, $attendee ) {
+		if ( $attendee_phone = get_post_meta( $attendee->ID, 'tix_phone', true ) ) {
+			$rows[] = array(
+				__( 'Phone Number', 'camptix-instamojo' ),
+				$attendee_phone,
+			);
+		}
+
+		
+		return $rows;
+		
+	}
+
+
+	public function add_attendee_info( $attendee, $attendee_info, $current_count ) {
+		if ( ! empty( $_POST['tix_attendee_info'][ $current_count ]['phone'] ) ) {
+			$attendee->phone = trim( $_POST['tix_attendee_info'][ $current_count ]['phone'] );
+		}
+
+		return $attendee;
+	}
+
+	public function save_attendee_info( $attendee_id, $attendee ) {
+		if ( property_exists( $attendee, 'phone' ) ) {
+			update_post_meta( $attendee_id, 'tix_phone', $attendee->phone );
+		}
+	}
+
+	public function add_phone_field( $form_data, $current_count, $tickets_selected_count ) {
+		ob_start();
+		?>
+		<tr class="tix-row-phone">
+			<td class="tix-required tix-left"><?php _e( 'Phone Number', 'camptix-instamojo' ); ?>
+				<span class="tix-required-star">*</span>
+			</td>
+			<?php $value = isset( $form_data['tix_attendee_info'][ $current_count ]['phone'] ) ? $form_data['tix_attendee_info'][ $current_count ]['phone'] : ''; ?>
+			<td class="tix-right">
+				<input name="tix_attendee_info[<?php echo esc_attr( $current_count ); ?>][phone]" type="text" class="mobile" value="<?php echo esc_attr( $value ); ?>"/><br><small class="message"></small>
+			</td>
+		</tr>
+		<?php
+		echo ob_get_clean();
+	}
+
+
+
 
 	function payment_settings_fields() {
 		
@@ -43,7 +108,9 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 		// code change by me start
 		$this->add_settings_field_helper( 'Instamojo-Api-Key', 'Instamojo Api KEY', array( $this, 'field_text' ) );
 		$this->add_settings_field_helper( 'Instamojo-Auth-Token', 'Instamojo Auth Token', array( $this, 'field_text' ) );
-		$this->add_settings_field_helper( 'mobile-no', 'Mobile Field Name', array( $this, 'field_text' ) );
+		$this->add_settings_field_helper( 'Instamojo-salt', 'Instamojo Salt', array( $this, 'field_text' ) );
+		
+		//$this->add_settings_field_helper( 'mobile-no', 'Mobile Field Name', array( $this, 'field_text' ) );
 		
 		// code change by me end
 
@@ -59,8 +126,9 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 			$output['Instamojo-Api-Key'] = $input['Instamojo-Api-Key'];
 		if ( isset( $input['Instamojo-Auth-Token'] ) )
 			$output['Instamojo-Auth-Token'] = $input['Instamojo-Auth-Token'];
-		if ( isset( $input['mobile-no'] ) )
-			$output['mobile-no'] = $input['mobile-no'];
+		if ( isset( $input['Instamojo-salt'] ) )
+			$output['Instamojo-salt'] = $input['Instamojo-salt'];
+		
 	
 		if ( isset( $input['sandbox'] ) )
 			$output['sandbox'] = (bool) $input['sandbox'];
@@ -82,6 +150,22 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 			if ( 'payment_notify' == $_GET['tix_action'] )
 				$this->payment_notify();
 		}
+
+
+		if ( 'attendee_info' == $_GET['tix_action'] ) {
+
+				
+				$merchant = $this->get_merchant_credentials();
+
+				$data = array(
+					'errors'          => array(
+						'phone' => __( 'Please fill in all required fields.', 'camptix-instamojo' ),
+					),
+				);
+
+				wp_localize_script( 'camptix-instamojo-js', 'camptix_isntamojo_para', $data );
+			}
+
 	}
 
 	function payment_return() {
@@ -90,18 +174,15 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 		$this->log( sprintf( 'Running payment_return. Request data attached.' ), null, $_REQUEST );
 		$this->log( sprintf( 'Running payment_return. Server data attached.' ), null, $_SERVER );
 
+
 		$payment_token = ( isset( $_REQUEST['tix_payment_token'] ) ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
 		$payment_id = ( isset( $_REQUEST['payment_id'] ) ) ? trim( $_REQUEST['payment_id'] ) : '';
 		
+
+		$payment_token = ( isset( $_REQUEST['tix_payment_token'] ) ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
 		if ( empty( $payment_token ) )
 			return;
-		 // if(!empty($payment_id)){
-		 // 	$this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_COMPLETED );
-
-		 // }else{
-			// $this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_PENDING );		 	
-		 // }
-
+		 
 		$attendees = get_posts(
 			array(
 				'posts_per_page' => 1,
@@ -150,13 +231,18 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 
 		$payment_token = ( isset( $_REQUEST['tix_payment_token'] ) ) ? trim( $_REQUEST['tix_payment_token'] ) : '';
 
-
-
 		$payload = stripslashes_deep( $_REQUEST );
 
 		/*
 		Basic PHP script to handle Instamojo RAP webhook.
 		*/
+
+
+		$instamojo_key = $this->options['Instamojo-Api-Key'];
+		$instamojo_token = $this->options['Instamojo-Auth-Token'];
+		$instamojo_salt = $this->options['Instamojo-salt'];
+		$mobile_no = $this->options['mobile-no'];
+		
 
 		$data = $_POST;
 		$mac_provided = $data['mac'];  // Get the MAC from the POST data
@@ -172,8 +258,8 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 		}
 		// You can get the 'salt' from Instamojo's developers page(make sure to log in first): https://www.instamojo.com/developers
 		// Pass the 'salt' without <>
-		$mac_calculated = hash_hmac("sha1", implode("|", $data), "<YOUR_SALT>");
-		// if($mac_provided == $mac_calculated){
+		$mac_calculated = hash_hmac("sha1", implode("|", $data), $instamojo_salt);
+		if($mac_provided == $mac_calculated){
 		    if($data['status'] == "Credit"){
 		        // Payment was successful, mark it as successful in your database.
 		        // You can acess payment_request_id, purpose etc here. 
@@ -182,23 +268,13 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 		    else{
 		        // Payment was unsuccessful, mark it as failed in your database.
 		        // You can acess payment_request_id, purpose etc here.
-		        $this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_PENDING );
+		        $this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_CANCELLED );
 		    }
-		// }
-		// else{
-		    // $this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_COMPLETED );
-		// }
+		 }
+		 else{
+		     $this->payment_result( $_REQUEST['tix_payment_token'], CampTix_Plugin::PAYMENT_STATUS_PENDING );
+		 }
 
-		$instamojo_key = $this->options['Instamojo-Api-Key'];
-		$instamojo_token = $this->options['Instamojo-Auth-Token'];
-		$mobile_no = $this->options['mobile-no'];
-
-
-		 // if(isset($_REQUEST['payment_id'])){
-		 // 	$this->payment_result( $_REQUEST['payment_id'], CampTix_Plugin::PAYMENT_STATUS_COMPLETED );
-
-		 // }
-	
 	
 	}
 
@@ -232,8 +308,7 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 
 		$instamojo_key 	= $this->options['Instamojo-Api-Key'];
 		$instamojo_token 	= $this->options['Instamojo-Auth-Token'];
-		$mobile_no 	= $this->options['mobile-no'];
-		
+		$instamojo_salt = $this->options['Instamojo-salt'];
 		
 		$order_amount 	= $order['total'];
 		if ( isset( $this->camptix_options['event_name'] ) ) {
@@ -261,48 +336,19 @@ class CampTix_Payment_Method_Instamojo extends CampTix_Payment_Method {
 		foreach ( $attendees as $attendee ) {
 				$tix_id = get_post( get_post_meta( $attendee->ID, 'tix_ticket_id', true ) );
 			$attendee_questions = get_post_meta( $attendee->ID, 'tix_questions', true ); // Array of Attendee Questons
-$j=0;
-		$k=0;
-		$g=0;
-		for($i=0; $i<strlen($mobile_no); $i++){
-			if($mobile_no[$i] == "[")
-			{
-				$j++;
-
-			}
-			if($mobile_no[$i] == "]")
-			{
-				$k++;
-
-			}
-			if($j==2)
-			{
-				$openpos=$i;
-				$sub = substr($mobile_no, $i+1,strlen($mobile_no));
-    			$mobile_no_fieldid = substr($sub,0,strpos($sub,"]"));
-				
-				$j=0;
-			}
-			if($k==2)
-			{
-				$closepos=$i;
-				$k=0;
-			}
-		
-		}
-		
-			 if( $mobile_no != '' ) { // Check if Setup for Mobile is set?
-
-				$attendee_info_mobile = $attendee_questions[$mobile_no_fieldid];
-
-			 } else {
-			 	$attendee_info_mobile = '';
-			}
 			
 			$email = $attendee->tix_email;
 			$name = $attendee->tix_first_name.' '.$attendee->tix_last_name;
 
 		}
+
+
+		$info       = $this->get_order( $payment_token );
+		$extra_info = array(
+			'phone'          => get_post_meta( $info['attendee_id'], 'tix_phone', true ),
+			
+		);
+		
 
 			$ch = curl_init();
 
@@ -320,7 +366,7 @@ $j=0;
 			$payload = Array(
 			    'purpose' => $productinfo,
 			    'amount' => $order_amount,
-			    'phone' => $attendee_info_mobile,
+			    'phone' => $extra_info['phone'],
 			    'buyer_name' =>$name,
 			    'redirect_url' => $return_url,
 			    'send_email' => false,
